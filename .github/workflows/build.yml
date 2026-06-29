@@ -1,4 +1,4 @@
-name: Build
+name: Build Libdispatch with MSVC
 
 on:
   workflow_dispatch:
