@@ -1,0 +1,47 @@
+name: Build
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-windows-msvc:
+    runs-on: windows-latest
+    steps:
+    - name: Checkout Source Code
+      uses: actions/checkout@v4
+
+    - name: Add MSBuild to PATH
+      uses: microsoft/setup-msbuild@v2
+
+    - name: Configure Developer Command Prompt
+      uses: ilammy/msvc-dev-cmd@v1
+      with:
+        arch: x64
+
+    - name: Setup Ninja
+      uses: ashutoshgngwr/toggle-ninja-action@v1.2.0
+
+    - name: Configure with CMake
+      run: |
+        mkdir build
+        cd build
+        cmake -G "Ninja" `
+          -DCMAKE_BUILD_TYPE=Release `
+          -DCMAKE_C_COMPILER=cl.exe `
+          -DCMAKE_CXX_COMPILER=cl.exe `
+          -DCMAKE_INSTALL_PREFIX="${{ github.workspace }}/dispatch_dist" `
+          -DCMAKE_C_FLAGS="/D_dispatch_bug_deprecated(msg)=" `
+          -DCMAKE_CXX_FLAGS="/D_dispatch_bug_deprecated(msg)=" `
+          ..
+
+    - name: Build and Install
+      run: |
+        cd build
+        ninja
+        cmake --install .
+
+    - name: Upload Prebuilt Libdispatch
+      uses: actions/upload-artifact@v4
+      with:
+        name: apple-libdispatch-msvc-x64
+        path: ${{ github.workspace }}/dispatch_dist/
