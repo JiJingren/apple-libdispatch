@@ -1,10 +1,10 @@
-name: Build
+name: Build Libdispatch Static with MinGW64 (Source Patched)
 
 on:
   workflow_dispatch:
 
 jobs:
-  build-windows-msys2:
+  build-windows-mingw:
     runs-on: windows-latest
     defaults:
       run:
@@ -13,36 +13,44 @@ jobs:
     - name: Checkout Source Code
       uses: actions/checkout@v4
 
-    - name: Setup MSYS2 (MSYS Mode)
+    - name: Setup MSYS2
       uses: msys2/setup-msys2@v2
       with:
-        msystem: MSYS
+        msystem: MINGW64
         update: true
         install: >-
           git
-          make
-          cmake
-          clang
-          ninja
+          mingw-w64-x86_64-cmake
+          mingw-w64-x86_64-clang
+          mingw-w64-x86_64-ninja
 
-    - name: Configure and Build
+    - name: Patch Source Code and Build
       run: |
-        mkdir build && cd build
+        # 1. 斩草除根：直接在源码中把导致编译失败的 _dispatch_bug_deprecated 声明和实现给注掉
+        # 修复 internal.h 中的声明
+        sed -i 's/void _dispatch_bug_deprecated(const char \*msg);/\/\/ void _dispatch_bug_deprecated(const char \*msg);/g' src/internal.h
         
-        # 核心：显式指定使用 Clang 编译器，拒绝让 CMake 默认去抓普通的 GCC (cc)
+        # 修复 init.c 中的实现（将整个废弃函数的实现直接注释掉）
+        sed -i 's/^_dispatch_bug_deprecated(const char \*msg)/inline void _dispatch_bug_deprecated_disabled(const char \*msg)/g' src/init.c
+
+        # 2. 修复 BlocksRuntime 里由于 MSVC 遗留导致的宏定义错乱
+        sed -i 's/_dispatch_bug_deprecated("Block_size of\.\.\.")/((void)0)/g' src/BlocksRuntime/Block_private.h
+
+        # 3. 开始干净的 MinGW64 静态编译
+        mkdir build && cd build
         cmake -G "Ninja" \
           -DCMAKE_BUILD_TYPE=Release \
           -DBUILD_SHARED_LIBS=OFF \
-          -DCMAKE_C_COMPILER=/usr/bin/clang \
-          -DCMAKE_CXX_COMPILER=/usr/bin/clang++ \
-          -DCMAKE_INSTALL_PREFIX="${{ github.workspace }}/dispatch_msys_dist" \
+          -DCMAKE_C_COMPILER=/mingw64/bin/clang.exe \
+          -DCMAKE_CXX_COMPILER=/mingw64/bin/clang++.exe \
+          -DCMAKE_INSTALL_PREFIX="${{ github.workspace }}/dispatch_static_dist" \
           ..
         
         ninja
         cmake --install .
 
-    - name: Upload Prebuilt Libdispatch
+    - name: Upload Prebuilt Static Libdispatch
       uses: actions/upload-artifact@v4
       with:
-        name: apple-libdispatch-msys2-static
-        path: ${{ github.workspace }}/dispatch_msys_dist/
+        name: apple-libdispatch-mingw64-static
+        path: ${{ github.workspace }}/dispatch_static_dist/
