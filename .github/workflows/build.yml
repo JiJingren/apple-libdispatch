@@ -24,7 +24,7 @@ jobs:
         cd build
         cmake -G "Ninja" `
           -DCMAKE_BUILD_TYPE=Release `
-          -DBUILD_SHARED_LIBS=ON `
+          -DBUILD_SHARED_LIBS=OFF `
           -DCMAKE_C_COMPILER=cl.exe `
           -DCMAKE_CXX_COMPILER=cl.exe `
           -DCMAKE_INSTALL_PREFIX="${{ github.workspace }}/dispatch_dist" `
@@ -32,13 +32,19 @@ jobs:
           -DCMAKE_CXX_FLAGS="/D_dispatch_bug_deprecated(msg)=" `
           ..
 
-    - name: Build and Install
+    - name: Build and Patch Install Script
       run: |
         cd build
         ninja
         
-        Get-ChildItem -Path . -Filter "*.dll" -Recurse | Copy-Item -Destination . -Force -ErrorAction SilentlyContinue
-        Get-ChildItem -Path . -Filter "*.lib" -Recurse | Copy-Item -Destination . -Force -ErrorAction SilentlyContinue
+        Get-ChildItem -Path . -Filter "cmake_install.cmake" -Recurse | ForEach-Object {
+            (Get-Content $_.FullName) `
+            -replace 'BlocksRuntime\.dll', 'BlocksRuntime.lib' `
+            -replace 'dispatch\.dll', 'dispatch.lib' `
+            -replace 'BlocksRuntime\.DLL', 'BlocksRuntime.lib' `
+            -replace 'dispatch\.DLL', 'dispatch.lib' `
+            | Set-Content $_.FullName
+        }
         
         cmake --install .
 
