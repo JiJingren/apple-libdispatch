@@ -46,6 +46,13 @@ jobs:
             | Set-Content $_.FullName
         }
         
+        $libFiles = Get-ChildItem -Path . -Filter "*.lib" -Recurse
+        foreach ($file in $libFiles) {
+            Copy-Item $file.FullName -Destination "." -Force -ErrorAction SilentlyContinue
+            Copy-Item $file.FullName -Destination "src/" -Force -ErrorAction SilentlyContinue
+            Copy-Item $file.FullName -Destination "src/BlocksRuntime/" -Force -ErrorAction SilentlyContinue
+        }
+        
         cmake --install .
 
     - name: Upload Prebuilt Libdispatch
