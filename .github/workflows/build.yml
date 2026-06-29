@@ -1,4 +1,4 @@
-name: Build Libdispatch with MSYS2 (POSIX Environment)
+name: Build
 
 on:
   workflow_dispatch:
@@ -16,13 +16,12 @@ jobs:
     - name: Setup MSYS2 (MSYS Mode)
       uses: msys2/setup-msys2@v2
       with:
-        msystem: MSYS  # 核心：使用 MSYS 模式，走 POSIX 兼容层，不走 MINGW64
+        msystem: MSYS
         update: true
         install: >-
           git
           make
           cmake
-          gcc
           clang
           ninja
 
@@ -30,10 +29,12 @@ jobs:
       run: |
         mkdir build && cd build
         
-        # 既然是纯粹的类 Linux 环境，我们甚至不需要用 -D 去抹掉宏，让它走普通的静态编译即可
+        # 核心：显式指定使用 Clang 编译器，拒绝让 CMake 默认去抓普通的 GCC (cc)
         cmake -G "Ninja" \
           -DCMAKE_BUILD_TYPE=Release \
           -DBUILD_SHARED_LIBS=OFF \
+          -DCMAKE_C_COMPILER=/usr/bin/clang \
+          -DCMAKE_CXX_COMPILER=/usr/bin/clang++ \
           -DCMAKE_INSTALL_PREFIX="${{ github.workspace }}/dispatch_msys_dist" \
           ..
         
