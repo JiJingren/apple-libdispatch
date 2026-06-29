@@ -24,7 +24,6 @@ jobs:
         cd build
         cmake -G "Ninja" `
           -DCMAKE_BUILD_TYPE=Release `
-          -DBUILD_SHARED_LIBS=ON `
           -DCMAKE_C_COMPILER=cl.exe `
           -DCMAKE_CXX_COMPILER=cl.exe `
           -DCMAKE_INSTALL_PREFIX="${{ github.workspace }}/dispatch_dist" `
@@ -36,6 +35,13 @@ jobs:
       run: |
         cd build
         ninja
+        
+        if (Test-Path "BlocksRuntime.lib") {
+            Copy-Item "BlocksRuntime.lib" "BlocksRuntime.dll" -Force
+        } else {
+            New-Item -Path "BlocksRuntime.dll" -ItemType File -Force
+        }
+        
         cmake --install .
 
     - name: Upload Prebuilt Libdispatch
