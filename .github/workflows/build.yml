@@ -1,62 +1,50 @@
-name: Build Libdispatch with MSVC
+name: Build Libdispatch Static with MinGW64
 
 on:
   workflow_dispatch:
 
 jobs:
-  build-windows-msvc:
+  build-windows-mingw:
     runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
     steps:
     - name: Checkout Source Code
       uses: actions/checkout@v4
 
-    - name: Add MSBuild to PATH
-      uses: microsoft/setup-msbuild@v2
-
-    - name: Configure Developer Command Prompt
-      uses: ilammy/msvc-dev-cmd@v1
+    - name: Setup MSYS2
+      uses: msys2/setup-msys2@v2
       with:
-        arch: x64
+        msystem: MINGW64
+        update: true
+        install: >-
+          git
+          mingw-w64-x86_64-cmake
+          mingw-w64-x86_64-clang
+          mingw-w64-x86_64-ninja
 
-    - name: Configure with CMake
+    - name: Configure and Build Static Libdispatch
       run: |
-        mkdir build
-        cd build
-        cmake -G "Ninja" `
-          -DCMAKE_BUILD_TYPE=Release `
-          -DBUILD_SHARED_LIBS=OFF `
-          -DCMAKE_C_COMPILER=cl.exe `
-          -DCMAKE_CXX_COMPILER=cl.exe `
-          -DCMAKE_INSTALL_PREFIX="${{ github.workspace }}/dispatch_dist" `
-          -DCMAKE_C_FLAGS="/D_dispatch_bug_deprecated(msg)=" `
-          -DCMAKE_CXX_FLAGS="/D_dispatch_bug_deprecated(msg)=" `
+        mkdir build && cd build
+        
+        # -DBUILD_SHARED_LIBS=OFF 确保输出为静态库 (.a)
+        # 核心：使用 -D_dispatch_bug_deprecated(msg)=() 彻底将该废弃宏在预处理阶段抹平，不留任何符号
+        cmake -G "Ninja" \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DBUILD_SHARED_LIBS=OFF \
+          -DCMAKE_C_COMPILER=/mingw64/bin/clang.exe \
+          -DCMAKE_CXX_COMPILER=/mingw64/bin/clang++.exe \
+          -DCMAKE_INSTALL_PREFIX="${{ github.workspace }}/dispatch_static_dist" \
+          -DCMAKE_C_FLAGS="-D_dispatch_bug_deprecated(msg)=()" \
+          -DCMAKE_CXX_FLAGS="-D_dispatch_bug_deprecated(msg)=()" \
           ..
-
-    - name: Build and Patch Install Script
-      run: |
-        cd build
+        
         ninja
-        
-        Get-ChildItem -Path . -Filter "cmake_install.cmake" -Recurse | ForEach-Object {
-            (Get-Content $_.FullName) `
-            -replace 'BlocksRuntime\.dll', 'BlocksRuntime.lib' `
-            -replace 'dispatch\.dll', 'dispatch.lib' `
-            -replace 'BlocksRuntime\.DLL', 'BlocksRuntime.lib' `
-            -replace 'dispatch\.DLL', 'dispatch.lib' `
-            | Set-Content $_.FullName
-        }
-        
-        $libFiles = Get-ChildItem -Path . -Filter "*.lib" -Recurse
-        foreach ($file in $libFiles) {
-            Copy-Item $file.FullName -Destination "." -Force -ErrorAction SilentlyContinue
-            Copy-Item $file.FullName -Destination "src/" -Force -ErrorAction SilentlyContinue
-            Copy-Item $file.FullName -Destination "src/BlocksRuntime/" -Force -ErrorAction SilentlyContinue
-        }
-        
         cmake --install .
 
-    - name: Upload Prebuilt Libdispatch
+    - name: Upload Prebuilt Static Libdispatch
       uses: actions/upload-artifact@v4
       with:
-        name: apple-libdispatch-msvc-x64
-        path: ${{ github.workspace }}/dispatch_dist/
+        name: apple-libdispatch-mingw64-static
+        path: ${{ github.workspace }}/dispatch_static_dist/
