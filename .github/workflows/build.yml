@@ -18,9 +18,6 @@ jobs:
       with:
         arch: x64
 
-    - name: Setup Ninja
-      uses: ashutoshgngwr/toggle-ninja-action@v1.2.0
-
     - name: Configure with CMake
       run: |
         mkdir build
