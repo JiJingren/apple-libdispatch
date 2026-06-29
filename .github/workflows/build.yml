@@ -1,62 +1,47 @@
-name: Build Libdispatch with MSVC (Manual Collect)
+name: Build Libdispatch with MSYS2 (POSIX Environment)
 
 on:
   workflow_dispatch:
 
 jobs:
-  build-windows-msvc:
+  build-windows-msys2:
     runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
     steps:
     - name: Checkout Source Code
       uses: actions/checkout@v4
 
-    - name: Add MSBuild to PATH
-      uses: microsoft/setup-msbuild@v2
-
-    - name: Configure Developer Command Prompt
-      uses: ilammy/msvc-dev-cmd@v1
+    - name: Setup MSYS2 (MSYS Mode)
+      uses: msys2/setup-msys2@v2
       with:
-        arch: x64
+        msystem: MSYS  # 核心：使用 MSYS 模式，走 POSIX 兼容层，不走 MINGW64
+        update: true
+        install: >-
+          git
+          make
+          cmake
+          gcc
+          clang
+          ninja
 
-    - name: Configure with CMake
+    - name: Configure and Build
       run: |
-        mkdir build
-        cd build
-        # 强制走静态库编译，避开 DLL 导出符号缺失问题
-        cmake -G "Ninja" `
-          -DCMAKE_BUILD_TYPE=Release `
-          -DBUILD_SHARED_LIBS=OFF `
-          -DCMAKE_C_COMPILER=cl.exe `
-          -DCMAKE_CXX_COMPILER=cl.exe `
-          -DCMAKE_C_FLAGS="/D_dispatch_bug_deprecated(msg)=" `
-          -DCMAKE_CXX_FLAGS="/D_dispatch_bug_deprecated(msg)=" `
+        mkdir build && cd build
+        
+        # 既然是纯粹的类 Linux 环境，我们甚至不需要用 -D 去抹掉宏，让它走普通的静态编译即可
+        cmake -G "Ninja" \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DBUILD_SHARED_LIBS=OFF \
+          -DCMAKE_INSTALL_PREFIX="${{ github.workspace }}/dispatch_msys_dist" \
           ..
-
-    - name: Build and Manual Install
-      run: |
-        cd build
+        
         ninja
-        
-        # 🛠️ 既然自带的安装脚本废了，我们自己手动创建一个纯净的输出目录
-        $dist = "${{ github.workspace }}/dispatch_dist"
-        New-Item -ItemType Directory -Force -Path "$dist/lib"
-        New-Item -ItemType Directory -Force -Path "$dist/include/dispatch"
-        New-Item -ItemType Directory -Force -Path "$dist/include/os"
-        
-        # 1. 暴力搜刮 build 树里生成的 .lib 静态库文件（包括 BlocksRuntime 和 dispatch）
-        Get-ChildItem -Path . -Filter "*.lib" -Recurse | ForEach-Object {
-            Copy-Item $_.FullName -Destination "$dist/lib/" -Force
-            Write-Host "Collected lib: $_.Name"
-        }
-        
-        # 2. 从源码目录搜刮所需的公共头文件
-        cd ..
-        if (Test-Path "dispatch") { Copy-Item "dispatch/*.h" -Destination "$dist/include/dispatch/" -Force }
-        if (Test-Path "os") { Copy-Item "os/*.h" -Destination "$dist/include/os/" -Force }
-        if (Test-Path "src/BlocksRuntime/Block.h") { Copy-Item "src/BlocksRuntime/Block.h" -Destination "$dist/include/" -Force }
+        cmake --install .
 
     - name: Upload Prebuilt Libdispatch
       uses: actions/upload-artifact@v4
       with:
-        name: apple-libdispatch-msvc-static
-        path: ${{ github.workspace }}/dispatch_dist/
+        name: apple-libdispatch-msys2-static
+        path: ${{ github.workspace }}/dispatch_msys_dist/
